@@ -9,10 +9,12 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.telephony.PhoneStateListener;
@@ -27,24 +29,24 @@ public class PhoneDialer extends CordovaPlugin {
 	public static final int CALL_REQ_CODE = 0;
 	public static final int PERMISSION_DENIED_ERROR = 20;
 	public static final String CALL_PHONE = Manifest.permission.CALL_PHONE;
-	public String isSpeakerOn = "False"; // To control the call has been made from the application
+	//public String isSpeakerOn = "False"; // To control the call has been made from the application
 	public boolean callFromOffHook = false; // To control the change to idle state is from the app call
 	public boolean callFromApp = false; // To control the call has been made from the application
 	public TelephonyManager manager;
- 	public StatePhoneReceiver myPhoneStateListener;
+	public StatePhoneReceiver myPhoneStateListener;
 
 	private CallbackContext callbackContext;        // The callback context from which we were invoked.
 	private JSONArray executeArgs;
 	private CordovaInterface icordova;
-
+	boolean isSpeakerOn = false;
 	protected void getCallPermission(int requestCode) {
 		cordova.requestPermission(this, requestCode, CALL_PHONE);
 	}
 
 	public void initialize(CordovaInterface cordova, CordovaWebView webView) {
 		icordova = cordova;
-		super.initialize(cordova, webView);		
-    }
+		super.initialize(cordova, webView);
+	}
 
 	@Override
 	public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
@@ -60,8 +62,12 @@ public class PhoneDialer extends CordovaPlugin {
 				}
 			} else if ("dial".equalsIgnoreCase(action)) {
 				dialPhone(executeArgs);
-			} 
-			
+			} else if ("toggle".equalsIgnoreCase(action)){
+				toggleAudio(executeArgs);
+			} else if ("hangUp".equalsIgnoreCase(action)){
+				hangUpCall(executeArgs);
+			}
+
 			return true;
 
 		} catch (Exception e) {
@@ -71,7 +77,7 @@ public class PhoneDialer extends CordovaPlugin {
 
 			return false;
 		}
-		
+
 		// try {
 		// 	String phoneNumber = args.getString(0);
 		// 	Uri uri = Uri.parse("tel:"+phoneNumber);
@@ -97,9 +103,9 @@ public class PhoneDialer extends CordovaPlugin {
 		}
 
 		switch (requestCode) {
-		case CALL_REQ_CODE:
-			callPhone(executeArgs);
-			break;
+			case CALL_REQ_CODE:
+				callPhone(executeArgs);
+				break;
 		}
 	}
 
@@ -115,7 +121,8 @@ public class PhoneDialer extends CordovaPlugin {
 		@Override
 		public void onCallStateChanged(int state, String incomingNumber) {
 			super.onCallStateChanged(state, incomingNumber);
-
+			Log.d("state", "s" + state);
+			toggleAudio(isSpeakerOn);
 			switch (state) {
 
 				case TelephonyManager.CALL_STATE_OFFHOOK: //Call is established
@@ -124,23 +131,19 @@ public class PhoneDialer extends CordovaPlugin {
 						callFromOffHook=true;
 
 						try {
-							Thread.sleep(5000); // Delay 0,5 seconds to handle better turning on loudspeaker
+							Thread.sleep(5000); // Delay 0,5 seconds to handlecallPhone better turning on loudspeaker
 						} catch (InterruptedException e) {
 						}
 
-						//Activate loudspeaker
-						AudioManager audioManager = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
-						audioManager.setMode(AudioManager.MODE_NORMAL);
-						audioManager.setSpeakerphoneOn(true);
+
 					}
 					break;
 
 				case TelephonyManager.CALL_STATE_IDLE: //Call is finished
+					Log.d("CALL_STATE_IDLE", "c" + callFromOffHook);
 					if (callFromOffHook) {
+
 						callFromOffHook=false;
-						AudioManager audioManager = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
-						audioManager.setMode(AudioManager.MODE_NORMAL); //Deactivate loudspeaker
-						audioManager.setSpeakerphoneOn(false);
 						manager.listen(myPhoneStateListener, // Remove listener
 								PhoneStateListener.LISTEN_NONE);
 					}
@@ -149,14 +152,84 @@ public class PhoneDialer extends CordovaPlugin {
 		}
 	}
 
+
+	public void killCall(Context context) {
+		try {
+			// Get the boring old TelephonyManager
+			TelephonyManager telephonyManager =
+					(TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+
+			// Get the getITelephony() method
+			Class classTelephony = Class.forName(telephonyManager.getClass().getName());
+			Method methodGetITelephony = classTelephony.getDeclaredMethod("getITelephony");
+
+			// Ignore that the method is supposed to be private
+			methodGetITelephony.setAccessible(true);
+
+			// Invoke getITelephony() to get the ITelephony interface
+			Object telephonyInterface = methodGetITelephony.invoke(telephonyManager);
+
+			// Get the endCall method from ITelephony
+			Class telephonyInterfaceClass =
+					Class.forName(telephonyInterface.getClass().getName());
+			Method methodEndCall = telephonyInterfaceClass.getDeclaredMethod("endCall");
+
+			// Invoke endCall()
+			methodEndCall.invoke(telephonyInterface);
+
+			this.callbackContext.success();
+
+		} catch (Exception ex) { // Many things can go wrong with reflection calls
+			// Log.d(TAG,"PhoneStateReceiver **" + ex.toString());
+			this.callbackContext.error("couldNotHangUpCall");
+		}
+	}
+
+
+
+	private void toggleAudio(boolean speakerOn){
+		AudioManager audioManager = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
+		if (speakerOn){
+			audioManager.setMode(AudioManager.MODE_IN_CALL);
+		} else {
+			audioManager.setMode(AudioManager.MODE_NORMAL);
+		}
+		audioManager.setSpeakerphoneOn(isSpeakerOn);
+
+	}
+
+	private void hangUpCall(JSONArray args) throws JSONException {
+		//Activate loudspeaker
+
+		killCall(this.cordova.getActivity());
+
+
+	}
+
+	private void toggleAudio(JSONArray args) throws JSONException {
+		String onSpeak = args.getString(0);
+		//Activate loudspeaker
+		AudioManager audioManager = (AudioManager) this.cordova.getActivity().getSystemService(Context.AUDIO_SERVICE);
+		if (onSpeak.toLowerCase().equals("true")) {
+			isSpeakerOn = true;
+		} else {
+			isSpeakerOn = false;
+		}
+
+		toggleAudio(isSpeakerOn);
+
+
+	}
+
 	private void callPhone(JSONArray args) throws JSONException {
+		//toggleAudio(true);
 		String number = args.getString(0);
 		number = number.replaceAll("#", "%23");
 
 		if (!number.startsWith("tel:")) {
 			number = String.format("tel:%s", number);
 		}
-		
+
 		try {
 			Intent intent = new Intent(isTelephonyEnabled() ? Intent.ACTION_CALL : Intent.ACTION_VIEW);
 
@@ -175,16 +248,16 @@ public class PhoneDialer extends CordovaPlugin {
 			if (bypassAppChooser) {
 				intent.setPackage(getDialerPackage(intent));
 			}
-			
-			cordova.getActivity().startActivity(intent);									
+
+			cordova.getActivity().startActivity(intent);
 
 			this.callbackContext.success();
-		} 
+		}
 		catch (Exception e) {
 			this.callbackContext.error("CouldNotCallPhoneNumber");
 		}
 	}
-	
+
 	private void dialPhone(JSONArray args) throws JSONException {
 		String number = args.getString(0);
 		number = number.replaceAll("#", "%23");
@@ -192,7 +265,7 @@ public class PhoneDialer extends CordovaPlugin {
 		if (!number.startsWith("tel:")) {
 			number = String.format("tel:%s", number);
 		}
-		
+
 		try {
 			Intent intent = new Intent(isTelephonyEnabled() ? Intent.ACTION_DIAL : Intent.ACTION_VIEW);
 			intent.setData(Uri.parse(number));
@@ -205,7 +278,7 @@ public class PhoneDialer extends CordovaPlugin {
 			this.cordova.getActivity().startActivity(intent);
 
 			this.callbackContext.success();
-		} 
+		}
 		catch (Exception e) {
 			this.callbackContext.error("CouldNotCallPhoneNumber");
 		}
