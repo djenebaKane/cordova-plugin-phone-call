@@ -1,6 +1,6 @@
 {
-  "name": "cordova-plugin-phone-call",
-  "version": "1.1.3",
+  "name": "@djenebakane/cordova-plugin-phone-call",
+  "version": "0.0.1",
   "description": "Cordova Phone Call Plugin",
   "cordova": {
     "id": "cordova-plugin-phone-call",
@@ -14,7 +14,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lakshmansha/cordova-plugin-phone-call.git"
+    "url": "https://github.com/djenebakane/cordova-plugin-phone-call"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/djenebaKane"
   },
   "keywords": [
     "cordova",
@@ -26,9 +29,9 @@
   "author": "Lakshman.S",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/lakshmansha/cordova-plugin-phone-call/issues"
+    "url": "https://github.com/djenebakane/cordova-plugin-phone-callissues"
   },
-  "homepage": "https://github.com/lakshmansha/cordova-plugin-phone-call#readme",
+  "homepage": "https://github.com/djenebakane/cordova-plugin-phone-call#readme",
   "cordovaDependencies": {
     "3.0.0": {
       "cordova": ">100"
